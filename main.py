@@ -5,6 +5,8 @@ import time
 import os
 import re
 import json
+import sys
+import tempfile
 import urllib.request
 import urllib.parse
 import gzip
@@ -134,7 +136,18 @@ def get_deepseek_response(text: str, history: list) -> str | None:
 recognizer = sr.Recognizer()
 
 def say(text: str):
-    subprocess.run(["say", text])
+    if sys.platform == "darwin":
+        subprocess.run(["say", text])
+    else:
+        try:
+            from gtts import gTTS
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                tmp_path = f.name
+            gTTS(text=text, lang="ja").save(tmp_path)
+            subprocess.run(["mpg123", "-q", tmp_path])
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
 def get_time_response() -> str:
     now = datetime.datetime.now()
