@@ -1,6 +1,7 @@
 import speech_recognition as sr
 import subprocess
 import datetime
+import contextlib
 import time
 import os
 import re
@@ -25,6 +26,18 @@ try:
     _asound.snd_lib_error_set_handler(_ALSA_ERROR_CALLBACK)
 except Exception:
     pass
+
+@contextlib.contextmanager
+def _suppress_stderr():
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    old_stderr = os.dup(2)
+    os.dup2(devnull, 2)
+    try:
+        yield
+    finally:
+        os.dup2(old_stderr, 2)
+        os.close(devnull)
+        os.close(old_stderr)
 
 # ── 配置 ──────────────────────────────────────────────────────────────
 WAKE_WORDS    = ["みお", "ミオ", "澪", "美緒", "見よ", "見よう", "三尾"]
@@ -173,7 +186,7 @@ def get_time_response() -> str:
 
 def listen_once(timeout=None) -> str | None:
     try:
-        with sr.Microphone(chunk_size=8192) as source:
+        with _suppress_stderr(), sr.Microphone(chunk_size=8192) as source:
             if timeout is None:
                 recognizer.adjust_for_ambient_noise(source, duration=0.5)
             try:
