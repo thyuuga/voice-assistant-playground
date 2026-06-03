@@ -139,14 +139,17 @@ def say(text: str):
     if sys.platform == "darwin":
         subprocess.run(["say", text])
     else:
+        tmp_path = None
         try:
             from gtts import gTTS
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_path = f.name
             gTTS(text=text, lang="ja").save(tmp_path)
             subprocess.run(["mpg123", "-q", tmp_path])
+        except Exception as e:
+            print(f"[TTS] 语音输出失败，跳过: {e}")
         finally:
-            if os.path.exists(tmp_path):
+            if tmp_path and os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
 def get_time_response() -> str:
@@ -157,17 +160,21 @@ def get_time_response() -> str:
     return f"今は{period}{h12}時{minute:02d}分です。"
 
 def listen_once(timeout=None) -> str | None:
-    with sr.Microphone() as source:
-        if timeout is None:
-            recognizer.adjust_for_ambient_noise(source, duration=0.5)
-        try:
-            audio = recognizer.listen(
-                source,
-                timeout=timeout,
-                phrase_time_limit=PHRASE_LIMIT,
-            )
-        except sr.WaitTimeoutError:
-            return None
+    try:
+        with sr.Microphone(chunk_size=8192) as source:
+            if timeout is None:
+                recognizer.adjust_for_ambient_noise(source, duration=0.5)
+            try:
+                audio = recognizer.listen(
+                    source,
+                    timeout=timeout,
+                    phrase_time_limit=PHRASE_LIMIT,
+                )
+            except sr.WaitTimeoutError:
+                return None
+    except Exception:
+        time.sleep(1)
+        return None
     try:
         return recognizer.recognize_google(audio, language="ja-JP")
     except sr.UnknownValueError:
