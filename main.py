@@ -199,7 +199,10 @@ def main():
     last_heard = 0.0
     history: list = []  # DeepSeek 对话历史（当前倾听会话内）
 
-    print('启动完成。说「みお」来唤醒助手。')
+    print("*" * 34)
+    print("*  mio voice assistant start!")
+    print("*" * 34)
+    print("( ´ ▽ ` )ﾉ  说「みお」来唤醒助手。")
 
     while True:
 
