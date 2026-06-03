@@ -184,7 +184,7 @@ def listen_once(timeout=None) -> str | None:
                 )
             except sr.WaitTimeoutError:
                 return None
-    except Exception:
+    except (Exception, KeyboardInterrupt):
         time.sleep(1)
         return None
     try:
