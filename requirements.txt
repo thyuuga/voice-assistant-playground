@@ -1,4 +1,4 @@
 SpeechRecognition==3.16.1
 PyAudio==0.2.14
 python-dotenv>=1.0.0
-gTTS>=2.5.0
+edge-tts>=6.1.0

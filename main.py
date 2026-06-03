@@ -166,10 +166,11 @@ def say(text: str):
     else:
         tmp_path = None
         try:
-            from gtts import gTTS
+            import asyncio
+            import edge_tts
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_path = f.name
-            gTTS(text=text, lang="ja").save(tmp_path)
+            asyncio.run(edge_tts.Communicate(text, voice="ja-JP-NanamiNeural").save(tmp_path))
             subprocess.run(["mpg123", "-q", tmp_path])
         except Exception as e:
             print(f"[TTS] 语音输出失败，跳过: {e}")
