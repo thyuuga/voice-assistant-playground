@@ -18,10 +18,11 @@ load_dotenv()
 # 屏蔽 ALSA/Jack 的 C 层噪音日志（Unknown PCM、Jack not running 等）
 try:
     _asound = ctypes.cdll.LoadLibrary("libasound.so.2")
-    _ALSA_ERROR_HANDLER = ctypes.CFUNCTYPE(
+    _ALSA_ERROR_HANDLER_TYPE = ctypes.CFUNCTYPE(
         None, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p
     )
-    _asound.snd_lib_error_set_handler(_ALSA_ERROR_HANDLER(lambda *_: None))
+    _ALSA_ERROR_CALLBACK = _ALSA_ERROR_HANDLER_TYPE(lambda *_: None)  # 必须保持引用，防止 GC 回收
+    _asound.snd_lib_error_set_handler(_ALSA_ERROR_CALLBACK)
 except Exception:
     pass
 
