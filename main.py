@@ -160,52 +160,40 @@ def get_deepseek_response(text: str, history: list) -> str | None:
         return None
 
 # ── 工具函数 ───────────────────────────────────────────────────────────
-
-# sr.Microphone.__exit__ 在 __enter__ 失败时会因 self.stream=None 抛出 AttributeError，
-# 从而掩盖真正的 PyAudio 错误。这里打补丁让原始异常正常传播。
-_orig_mic_exit = sr.Microphone.__exit__
-def _safe_mic_exit(self, exc_type, exc_val, exc_tb):
-    if getattr(self, "stream", None) is None:
-        try:
-            self.audio.terminate()
-        except Exception:
-            pass
-        return False  # 不抑制原始异常
-    return _orig_mic_exit(self, exc_type, exc_val, exc_tb)
-sr.Microphone.__exit__ = _safe_mic_exit
-
 recognizer = sr.Recognizer()
 
-def _find_mic() -> int:
-    """探测第一个能真正打开的输入设备，返回其 PyAudio 设备索引。"""
+def _find_mic() -> tuple[int, int]:
+    """探测第一个能真正打开的输入设备，返回 (device_index, sample_rate)。
+    优先尝试 16000 Hz（Google STT 目标率），不行则依次试其他常见值。"""
     import pyaudio
+    preferred_rates = [16000, 44100, 48000, 8000]
     pa = pyaudio.PyAudio()
     try:
         for i in range(pa.get_device_count()):
             info = pa.get_device_info_by_index(i)
             if info.get("maxInputChannels", 0) <= 0:
                 continue
-            rate = int(info.get("defaultSampleRate", MIC_SAMPLE_RATE))
-            try:
-                stream = pa.open(
-                    format=pyaudio.paInt16,
-                    channels=1,
-                    rate=rate,
-                    input=True,
-                    input_device_index=i,
-                    frames_per_buffer=1024,
-                )
-                stream.close()
-                print(f"[mic] 使用设备 {i}: {info['name']}  rate={rate}", flush=True)
-                return i
-            except Exception:
-                continue
+            for rate in preferred_rates:
+                try:
+                    stream = pa.open(
+                        format=pyaudio.paInt16,
+                        channels=1,
+                        rate=rate,
+                        input=True,
+                        input_device_index=i,
+                        frames_per_buffer=1024,
+                    )
+                    stream.close()
+                    print(f"[mic] 使用设备 {i}: {info['name']}  rate={rate}", flush=True)
+                    return i, rate
+                except Exception:
+                    continue
     finally:
         pa.terminate()
-    print("[mic] 未找到可用麦克风，回退到 device_index=0", flush=True)
-    return 0
+    print("[mic] 未找到可用麦克风，回退到 device_index=0 rate=44100", flush=True)
+    return 0, 44100
 
-MIC_DEVICE_INDEX = _find_mic()  # 覆盖顶部的默认值，选出实际可用的设备
+MIC_DEVICE_INDEX, MIC_SAMPLE_RATE = _find_mic()  # 覆盖顶部的默认值，选出实际可用的设备和采样率
 
 def say(text: str):
     if sys.platform == "darwin":
@@ -235,6 +223,9 @@ def get_time_response() -> str:
 def listen_once(timeout=POLL_TIMEOUT) -> str | None:
     try:
         with _suppress_stderr(), sr.Microphone(device_index=MIC_DEVICE_INDEX, sample_rate=MIC_SAMPLE_RATE, chunk_size=8192) as source:
+            # sr.Microphone.__enter__ 在 3.16.1 中会吞掉 pa.open 的异常并返回 stream=None
+            if source.stream is None:
+                raise OSError(f"麦克风打开失败 (device={MIC_DEVICE_INDEX}, rate={MIC_SAMPLE_RATE})")
             try:
                 audio = recognizer.listen(
                     source,
