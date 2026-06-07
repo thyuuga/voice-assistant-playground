@@ -153,16 +153,30 @@ recognizer.energy_threshold = 100        # 临时调低阈值排查，默认 300
 recognizer.dynamic_energy_threshold = False  # 关掉自动调整，先固定测试
 
 def _find_mic() -> tuple[int, int]:
-    """探测第一个能真正打开的输入设备，返回 (device_index, sample_rate)。
-    优先尝试 16000 Hz（Google STT 目标率），不行则依次试其他常见值。"""
+    """探测可用输入设备，返回 (device_index, sample_rate)。
+    优先选 pipewire/default 虚拟设备（在 PipeWire 系统上 hw:x,x 会给出静音）。"""
     import pyaudio
-    preferred_rates = [16000, 44100, 48000, 8000]
+    preferred_rates = [44100, 16000, 48000, 8000]
     pa = pyaudio.PyAudio()
     try:
+        devices = []
         for i in range(pa.get_device_count()):
             info = pa.get_device_info_by_index(i)
             if info.get("maxInputChannels", 0) <= 0:
                 continue
+            name = info["name"].lower()
+            # pipewire 虚拟设备优先，hw: 硬件接口在 PipeWire 系统上会给静音
+            if "pipewire" in name:
+                pri = 3
+            elif "default" in name:
+                pri = 2
+            elif "sysdefault" in name:
+                pri = 1
+            else:
+                pri = 0
+            devices.append((pri, i, info))
+
+        for _, i, info in sorted(devices, key=lambda x: -x[0]):
             for rate in preferred_rates:
                 try:
                     stream = pa.open(
@@ -180,8 +194,8 @@ def _find_mic() -> tuple[int, int]:
                     continue
     finally:
         pa.terminate()
-    print("[mic] 未找到可用麦克风，回退到 device_index=0 rate=44100", flush=True)
-    return 0, 44100
+    print("[mic] 未找到可用麦克风，回退到 pipewire", flush=True)
+    return 7, 44100
 
 MIC_DEVICE_INDEX, MIC_SAMPLE_RATE = _find_mic()  # 覆盖顶部的默认值，选出实际可用的设备和采样率
 
