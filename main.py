@@ -162,8 +162,9 @@ def get_deepseek_response(text: str, history: list) -> str | None:
 
 # ── 工具函数 ───────────────────────────────────────────────────────────
 recognizer = sr.Recognizer()
-recognizer.energy_threshold = 200        # 比默认 300 低，更容易触发
-recognizer.dynamic_energy_threshold = True   # 开启自适应，会在安静时自动降低阈值
+recognizer.energy_threshold = 100        # 起始值低，快速进入灵敏状态
+recognizer.dynamic_energy_threshold = True   # 开启自适应
+recognizer.dynamic_energy_ratio = 1.1        # 默认 1.5，改小让阈值贴近背景噪声
 
 def _find_mic() -> tuple[int, int]:
     """探测可用输入设备，返回 (device_index, sample_rate)。
