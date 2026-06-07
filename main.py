@@ -226,6 +226,7 @@ def listen_once(timeout=POLL_TIMEOUT) -> str | None:
             # sr.Microphone.__enter__ 在 3.16.1 中会吞掉 pa.open 的异常并返回 stream=None
             if source.stream is None:
                 raise OSError(f"麦克风打开失败 (device={MIC_DEVICE_INDEX}, rate={MIC_SAMPLE_RATE})")
+            recognizer.adjust_for_ambient_noise(source, duration=0.3)
             try:
                 audio = recognizer.listen(
                     source,
@@ -239,11 +240,14 @@ def listen_once(timeout=POLL_TIMEOUT) -> str | None:
         time.sleep(1)
         return None
     try:
-        return recognizer.recognize_google(audio, language="ja-JP")
+        text = recognizer.recognize_google(audio, language="ja-JP")
+        print(f"[STT] {repr(text)}", flush=True)
+        return text
     except sr.UnknownValueError:
+        print("[STT] 听到声音但无法识别", flush=True)
         return ""
     except Exception as e:
-        print(f"[listen_once] recognize error: {e}", flush=True)
+        print(f"[listen_once] recognize error: {type(e).__name__}: {e}", flush=True)
         return ""
 
 # ── 主循环（状态机） ───────────────────────────────────────────────────
