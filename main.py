@@ -161,6 +161,8 @@ def get_deepseek_response(text: str, history: list) -> str | None:
 
 # ── 工具函数 ───────────────────────────────────────────────────────────
 recognizer = sr.Recognizer()
+recognizer.energy_threshold = 100        # 临时调低阈值排查，默认 300 可能太高
+recognizer.dynamic_energy_threshold = False  # 关掉自动调整，先固定测试
 
 def _find_mic() -> tuple[int, int]:
     """探测第一个能真正打开的输入设备，返回 (device_index, sample_rate)。
