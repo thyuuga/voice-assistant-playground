@@ -162,8 +162,8 @@ def get_deepseek_response(text: str, history: list) -> str | None:
 
 # ── 工具函数 ───────────────────────────────────────────────────────────
 recognizer = sr.Recognizer()
-recognizer.energy_threshold = 100        # 临时调低阈值排查，默认 300 可能太高
-recognizer.dynamic_energy_threshold = False  # 关掉自动调整，先固定测试
+recognizer.energy_threshold = 200        # 比默认 300 低，更容易触发
+recognizer.dynamic_energy_threshold = True   # 开启自适应，会在安静时自动降低阈值
 
 def _find_mic() -> tuple[int, int]:
     """探测可用输入设备，返回 (device_index, sample_rate)。
@@ -243,7 +243,6 @@ def listen_once(timeout=POLL_TIMEOUT) -> str | None:
             # sr.Microphone.__enter__ 在 3.16.1 中会吞掉 pa.open 的异常并返回 stream=None
             if source.stream is None:
                 raise OSError(f"麦克风打开失败 (device={MIC_DEVICE_INDEX}, rate={MIC_SAMPLE_RATE})")
-            recognizer.adjust_for_ambient_noise(source, duration=0.3)
             try:
                 audio = recognizer.listen(
                     source,
