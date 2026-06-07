@@ -160,6 +160,20 @@ def get_deepseek_response(text: str, history: list) -> str | None:
         return None
 
 # ── 工具函数 ───────────────────────────────────────────────────────────
+
+# sr.Microphone.__exit__ 在 __enter__ 失败时会因 self.stream=None 抛出 AttributeError，
+# 从而掩盖真正的 PyAudio 错误。这里打补丁让原始异常正常传播。
+_orig_mic_exit = sr.Microphone.__exit__
+def _safe_mic_exit(self, exc_type, exc_val, exc_tb):
+    if getattr(self, "stream", None) is None:
+        try:
+            self.audio.terminate()
+        except Exception:
+            pass
+        return False  # 不抑制原始异常
+    return _orig_mic_exit(self, exc_type, exc_val, exc_tb)
+sr.Microphone.__exit__ = _safe_mic_exit
+
 recognizer = sr.Recognizer()
 
 def _find_mic() -> int:
