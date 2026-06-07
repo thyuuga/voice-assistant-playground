@@ -15,6 +15,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# sr.Microphone.__exit__ 在 __enter__ 失败时因 self.stream=None 抛 AttributeError，
+# 会掩盖真正的错误。打补丁让原始异常正常传播。
+_orig_mic_exit = sr.Microphone.__exit__
+def _safe_mic_exit(self, exc_type, exc_val, exc_tb):
+    if getattr(self, "stream", None) is None:
+        try:
+            self.audio.terminate()
+        except Exception:
+            pass
+        return False
+    return _orig_mic_exit(self, exc_type, exc_val, exc_tb)
+sr.Microphone.__exit__ = _safe_mic_exit
+
 @contextlib.contextmanager
 def _suppress_stderr():
     devnull = os.open(os.devnull, os.O_WRONLY)
@@ -226,7 +239,7 @@ def get_time_response() -> str:
 
 def listen_once(timeout=POLL_TIMEOUT) -> str | None:
     try:
-        with _suppress_stderr(), sr.Microphone(device_index=MIC_DEVICE_INDEX, sample_rate=MIC_SAMPLE_RATE, chunk_size=8192) as source:
+        with _suppress_stderr(), sr.Microphone(device_index=None, sample_rate=MIC_SAMPLE_RATE, chunk_size=8192) as source:
             # sr.Microphone.__enter__ 在 3.16.1 中会吞掉 pa.open 的异常并返回 stream=None
             if source.stream is None:
                 raise OSError(f"麦克风打开失败 (device={MIC_DEVICE_INDEX}, rate={MIC_SAMPLE_RATE})")
