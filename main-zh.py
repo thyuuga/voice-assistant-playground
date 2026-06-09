@@ -11,21 +11,22 @@ import tempfile
 import urllib.request
 import urllib.parse
 import gzip
-import ctypes
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# 屏蔽 ALSA/Jack 的 C 层噪音日志
-try:
-    _asound = ctypes.cdll.LoadLibrary("libasound.so.2")
-    _ALSA_ERROR_HANDLER_TYPE = ctypes.CFUNCTYPE(
-        None, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p
-    )
-    _ALSA_ERROR_CALLBACK = _ALSA_ERROR_HANDLER_TYPE(lambda *_: None)
-    _asound.snd_lib_error_set_handler(_ALSA_ERROR_CALLBACK)
-except Exception:
-    pass
+# sr.Microphone.__exit__ 在 __enter__ 失败时因 self.stream=None 抛 AttributeError，
+# 会掩盖真正的错误。打补丁让原始异常正常传播。
+_orig_mic_exit = sr.Microphone.__exit__
+def _safe_mic_exit(self, exc_type, exc_val, exc_tb):
+    if getattr(self, "stream", None) is None:
+        try:
+            self.audio.terminate()
+        except Exception:
+            pass
+        return False
+    return _orig_mic_exit(self, exc_type, exc_val, exc_tb)
+sr.Microphone.__exit__ = _safe_mic_exit
 
 @contextlib.contextmanager
 def _suppress_stderr():
@@ -40,7 +41,7 @@ def _suppress_stderr():
         os.close(old_stderr)
 
 # ── 配置 ──────────────────────────────────────────────────────────────
-WAKE_WORDS    = ["小澪", "小灵", "小玲", "小零", "小令"]
+WAKE_WORDS    = ["小澪", "小灵", "小玲", "小零", "小令", "小林", "晓林", "小临"]
 TIME_WORDS    = ["几点", "时间", "几时", "time"]
 WEATHER_WORDS = ["天气", "天候", "气温", "weather"]
 GOODBYE_WORDS = ["拜拜", "再见", "byebye", "bye", "晚安", "回见", "待会见"]
@@ -160,6 +161,9 @@ def get_deepseek_response(text: str, history: list) -> str | None:
 
 # ── 工具函数 ───────────────────────────────────────────────────────────
 recognizer = sr.Recognizer()
+recognizer.energy_threshold = 100
+recognizer.dynamic_energy_threshold = True
+recognizer.dynamic_energy_ratio = 1.1
 
 def say(text: str):
     if sys.platform == "darwin":
@@ -185,7 +189,9 @@ def get_time_response() -> str:
 
 def listen_once(timeout=POLL_TIMEOUT) -> str | None:
     try:
-        with _suppress_stderr(), sr.Microphone(device_index=MIC_DEVICE_INDEX, chunk_size=8192) as source:
+        with _suppress_stderr(), sr.Microphone(device_index=MIC_DEVICE_INDEX, sample_rate=44100, chunk_size=8192) as source:
+            if source.stream is None:
+                raise OSError(f"麦克风打开失败 (device={MIC_DEVICE_INDEX})")
             try:
                 audio = recognizer.listen(
                     source,
